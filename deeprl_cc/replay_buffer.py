@@ -25,7 +25,7 @@ class ReplayBuffer:
         self.seed = random.seed(seed)
         self.device = device
 
-    def add(self, state, action, reward, next_state, done):
+    def store(self, state, action, reward, next_state, done):
         """Add a new experience to buffer."""
         experience = self.experience(state, action, reward, next_state, done)
         self.memory.append(experience)
