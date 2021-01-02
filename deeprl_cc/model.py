@@ -119,8 +119,7 @@ class FullyConnectedActor(nn.Module):
         super().__init__()
 
         if sizes is None:
-            sizes = [200, 150]
-            # sizes = [256, 256]
+            sizes = [64, 64]
 
         if activations is None:
             activations = ["relu", "relu"]
@@ -159,8 +158,7 @@ class FullyConnectedCritic(nn.Module):
         super().__init__()
 
         if sizes is None:
-            sizes = [200, 150]
-            # sizes = [256, 256]
+            sizes = [64, 64]
 
         if activations is None:
             activations = ["relu", "relu"]
