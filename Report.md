@@ -28,8 +28,11 @@ with a single output unit that yields the Q value estimate for the given joint s
 
 The critic network interacts with the actor network by sending its Q-value approximations to the actor network
 for training. Note that the Q-value network has full visibility of all agents states and actions while the
-actor network only knows its agent's state and actions. Leveraging a centralized Q-value estimate leads to
-agents choosing action that can be system optimum rather than local player optimum.
+actor network only knows its agent's state and actions as shown in the diagram below
+([source](https://openai.com/blog/learning-to-cooperate-compete-and-communicate/)). Leveraging a centralized
+Q-value estimate leads to agents choosing action that can be system optimum rather than local player optimum.
+
+![Algorithm](./images/maddpg.gif)
 
 Target networks with identical architectures are used for both the actor, and the critic in order to stabilize
 training. The target network is updated once per main network update by polyak averaging.
