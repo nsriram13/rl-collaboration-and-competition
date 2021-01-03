@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import pickle
 from collections import deque
 
@@ -14,24 +15,31 @@ logging.set_verbosity(logging.DEBUG)
 
 # Hyper-parameters
 FLAGS = flags.FLAGS
-flags.DEFINE_float("gamma", 0.99, "Discount factor")
-flags.DEFINE_float("tau", 1e-3, "Soft update")
 
-flags.DEFINE_float("lrate_actor", 3e-4, "Learning rate for the actor network")
-flags.DEFINE_float("lrate_critic", 3e-4, "Learning rate for the critic network")
+flags.DEFINE_float("gamma", 0.99, "Discount factor used for DDPG update")
+flags.DEFINE_float(
+    "tau", 0.01, "Update factor for polyak averaging of target network weights"
+)
+
+flags.DEFINE_float("lrate_actor", 5e-4, "Learning rate for the actor network")
+flags.DEFINE_float("lrate_critic", 5e-4, "Learning rate for the critic network")
 flags.DEFINE_float("weight_decay", 0.0, "Weight decay")
 
-flags.DEFINE_integer("batch_size", 128, "Batch size")
+flags.DEFINE_integer(
+    "batch_size", 128, "Number of training cases over which each SGD update is computed"
+)
 flags.DEFINE_integer("update_freq", 1, "Number of env steps between updates")
 flags.DEFINE_integer("update_passes", 5, "Number of passes to run when updating")
 flags.DEFINE_list(
-    "ac_net",
-    [[64, 64], ["leaky_relu", "leaky_relu"]],
-    "Actor critic network configuration",
+    "ac_net", [[512, 256], ["relu", "relu"]], "Actor critic network configuration"
 )
 
 # Buffer
-flags.DEFINE_integer("buffer_size", int(1e6), "Buffer size")
+flags.DEFINE_integer(
+    "buffer_size",
+    int(1e6),
+    "Data for SGD update is sampled from this number of most recent experiences",
+)
 
 # Solution constraints
 flags.DEFINE_float(
@@ -47,6 +55,32 @@ flags.DEFINE_string(
 
 
 def main(_):
+
+    if not os.path.exists(FLAGS.log_dir):
+        os.makedirs(FLAGS.log_dir)
+
+    logging.get_absl_handler().use_absl_log_file()
+
+    # Log all the hyperparameters
+    logging.info(f"AC Network HParam: Hidden sizes set to {FLAGS.ac_net[0]}")
+    logging.info(f"AC Network HParam: Activations set to {FLAGS.ac_net[1]}")
+    logging.info(f"Actor Network HParam: Learning rate set to {FLAGS.lrate_actor}")
+    logging.info(f"Critic Network HParam: Learning rate set to {FLAGS.lrate_critic}")
+    logging.info(f"Optimizer weight decay set to {FLAGS.weight_decay}")
+    logging.info(f"Target network weights soft update factor set to {FLAGS.tau}")
+
+    logging.info(f"Replay buffer size set to {FLAGS.buffer_size}")
+    logging.info(f"DDPG Learning HParam: Batch size set to {FLAGS.batch_size}")
+    logging.info(f"DDPG Learning HParam: Discounting factor set to {FLAGS.gamma}")
+
+    logging.info(
+        f"DDPG Learning HParam: Number of env steps between updates set to "
+        f"{FLAGS.update_freq}"
+    )
+    logging.info(
+        f"DDPG Learning HParam: Number of passes to run when updating set to "
+        f"{FLAGS.update_passes}"
+    )
 
     env = UnityEnvironment(file_name="./Tennis_Linux_NoVis/Tennis.x86_64")
 
@@ -75,9 +109,8 @@ def main(_):
     logging.info(f'The state for the first agent looks like: {states[0]}')
 
     # Setup some variable for keeping track of the performance
-    scores_deque = deque(maxlen=100)
+    windowed_score = deque(maxlen=100)
     scores = []
-    average_scores_list = []
 
     # see if GPU is available for training
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -103,7 +136,7 @@ def main(_):
         for _ in range(num_agents)
     ]
 
-    shared_memory = ReplayBuffer(
+    replay_buffer = ReplayBuffer(
         FLAGS.buffer_size, FLAGS.batch_size, num_agents, FLAGS.seed, device
     )
 
@@ -133,9 +166,9 @@ def main(_):
             rewards = env_info.rewards
             dones = env_info.local_done
 
-            shared_memory.store(states, actions, rewards, next_states, dones)
+            replay_buffer.store(states, actions, rewards, next_states, dones)
             for agent in agents:
-                agent.step(shared_memory, t)
+                agent.step(replay_buffer, t)
 
             states = next_states
             score += rewards
@@ -145,12 +178,13 @@ def main(_):
 
         score_max = np.max(score)
         scores.append(score_max)
-        scores_deque.append(score_max)
-        average_score = np.mean(scores_deque)
-        average_scores_list.append(average_score)
+        windowed_score.append(score_max)
+        average_score = np.mean(windowed_score)
 
         logging.debug(
-            f'Episode {i_episode} | Average Score: {np.mean(scores_deque):.3f}'
+            f'Episode {i_episode}'
+            f' | Score this episode: {score_max:.3f}'  # noqa: E501
+            f' | Average Score: {np.mean(windowed_score):.3f}'  # noqa: E501
         )
 
         if i_episode % 100 == 0:
